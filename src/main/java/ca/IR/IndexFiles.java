@@ -24,18 +24,16 @@ public class IndexFiles {
 
         File docDirectory = new File(documentDirectoryPath);
         if (!docDirectory.exists() || !docDirectory.isDirectory()) {
-            System.out.println("Invalid directory specified: " + documentDirectoryPath);
+            System.out.println("Invalid directory specified , specify the correct one: " + documentDirectoryPath);
             return;
         }
 
         Directory indexDir = FSDirectory.open(Paths.get(indexDirectoryPath));
 
-        // Use StandardAnalyzer instead of EnglishAnalyzer
-        StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
-        // Alternatively, you can try WhitespaceAnalyzer for testing
+        // tried WhitespaceAnalyzer for testing
         WhitespaceAnalyzer whitespaceAnalyzer = new WhitespaceAnalyzer();
 
-        IndexWriterConfig iwConfig = new IndexWriterConfig(whitespaceAnalyzer); // Switch analyzer here
+        IndexWriterConfig iwConfig = new IndexWriterConfig(whitespaceAnalyzer);
         iwConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 
         try (IndexWriter idxWriter = new IndexWriter(indexDir, iwConfig)) {
