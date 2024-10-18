@@ -6,13 +6,11 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.search.*;
 import org.apache.lucene.search.similarities.BM25Similarity;
-import org.apache.lucene.search.similarities.BooleanSimilarity;
 import org.apache.lucene.search.similarities.ClassicSimilarity;
 import org.apache.lucene.search.similarities.LMDirichletSimilarity;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.nio.file.Paths;
@@ -21,99 +19,98 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class SearchFiles {
+
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
             System.out.println("Usage: SearchFiles <indexDir> <queriesFile> <scoreType> <outputFile>");
             return;
         }
 
-        String indexPath = args[0];
-        String queriesPath = args[1];
-        int scoreType = Integer.parseInt(args[2]);
-        String outputPath = args[3];
+        String indexDirectory = args[0];
+        String queriesFile = args[1];
+        int scoringMethod = Integer.parseInt(args[2]);
+        String outputFile = args[3];
 
-        try (DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexPath)));
-                PrintWriter writer = new PrintWriter(new FileWriter(outputPath))) {
+        try (DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectory)));
+                PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
 
             IndexSearcher searcher = new IndexSearcher(reader);
-            setSimilarity(searcher, scoreType);
+            applyScoringMethod(searcher, scoringMethod);
 
             StandardAnalyzer analyzer = new StandardAnalyzer();
-            String[] fields = { "title", "contents" };
-            Map<String, Float> boosts = new HashMap<>();
-            boosts.put("title", 3.0f); // Increase the boost for the title field
-            boosts.put("contents", 1.0f);
+            String[] searchableFields = { "title", "contents" };
+            Map<String, Float> fieldBoosts = new HashMap<>();
+            fieldBoosts.put("title", 3.0f); // Boost for title
+            fieldBoosts.put("contents", 1.0f);
 
-            MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
+            MultiFieldQueryParser parser = new MultiFieldQueryParser(searchableFields, analyzer, fieldBoosts);
 
-            // Read queries in .nqry format
-            parseQueries(queriesPath, parser, searcher, writer);
+            // Parse and process the queries from the file
+            handleQueries(queriesFile, parser, searcher, writer);
         }
 
-        System.out.println("Search completed. Results written to: " + outputPath);
+        System.out.println("Search completed. Results written to: " + outputFile);
     }
 
-    private static void parseQueries(String queriesPath, MultiFieldQueryParser parser, IndexSearcher searcher,
-            PrintWriter writer) {
-        File queryFile = new File(queriesPath);
+    // Parse the queries from the file
+    private static void handleQueries(String queryFilePath, MultiFieldQueryParser queryParser, IndexSearcher searcher,
+            PrintWriter resultWriter) {
+        File queryFile = new File(queryFilePath);
 
-        // Check if the file exists and is readable
         if (!queryFile.exists() || !queryFile.canRead()) {
-            System.out.println("Query file not found or is not readable: " + queriesPath);
-            return; // Exit the method if the file is not valid
+            System.out.println("Query file not found or cannot be read: " + queryFilePath);
+            return;
         }
 
         try (Scanner scanner = new Scanner(queryFile)) {
-            int queryNumber = 1;
-            StringBuilder queryBuilder = new StringBuilder();
-            boolean readingQuery = false;
+            int queryID = 1;
+            StringBuilder queryContent = new StringBuilder();
+            boolean isReadingQuery = false;
 
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine().trim();
 
                 if (line.startsWith(".I")) {
-                    // If there's content from a previous document, process it
-                    if (readingQuery) {
-                        processQuery(queryBuilder.toString(), queryNumber, parser, searcher, writer);
-                        queryBuilder.setLength(0); // Clear the query buffer
+                    // Process previous query content if available
+                    if (isReadingQuery) {
+                        executeQuery(queryContent.toString(), queryID, queryParser, searcher, resultWriter);
+                        queryContent.setLength(0);
                     }
-                    queryNumber++; // Increment the query number
-                    readingQuery = false; // Reset reading query flag
+                    queryID++; // Move to the next query
+                    isReadingQuery = false;
                 } else if (line.startsWith(".W")) {
-                    readingQuery = true; // Start reading the query text
-                } else if (readingQuery) {
-                    // Accumulate query text lines
-                    queryBuilder.append(line).append(" ");
+                    isReadingQuery = true;
+                } else if (isReadingQuery) {
+                    queryContent.append(line).append(" ");
                 }
             }
-            // Process the last query if exists
-            if (queryBuilder.length() > 0) {
-                processQuery(queryBuilder.toString(), queryNumber, parser, searcher, writer);
+            // Process the final query if there is content
+            if (queryContent.length() > 0) {
+                executeQuery(queryContent.toString(), queryID, queryParser, searcher, resultWriter);
             }
-        } catch (FileNotFoundException e) {
-            System.out.println("Error reading the query file: " + e.getMessage());
+        } catch (Exception e) {
+            System.out.println("Error processing the query file: " + e.getMessage());
         }
     }
 
-    // Process a query and perform the search
-    private static void processQuery(String queryString, int queryNumber, MultiFieldQueryParser parser,
+    // Execute the search for a single query
+    private static void executeQuery(String queryString, int queryID, MultiFieldQueryParser queryParser,
             IndexSearcher searcher, PrintWriter writer) {
         try {
-            queryString = escapeSpecialCharacters(queryString.trim()); // Escape special characters
-            Query query = parser.parse(queryString);
+            queryString = sanitizeQuery(queryString.trim()); // Clean the query string
+            Query query = queryParser.parse(queryString);
 
-            // Run the search and retrieve top 100 results
-            ScoreDoc[] hits = searcher.search(query, 50).scoreDocs;
+            // Execute the search and get top 50 results
+            ScoreDoc[] results = searcher.search(query, 50).scoreDocs;
 
             int rank = 1;
-            for (ScoreDoc hit : hits) {
-                Document doc = searcher.doc(hit.doc);
+            for (ScoreDoc scoreDoc : results) {
+                Document document = searcher.doc(scoreDoc.doc);
 
-                // Fetching the indexed 'documentID' instead of internal docId
-                String docID = doc.get("documentID");
+                String documentID = document.get("documentID");
 
-                // Write result in TREC format: queryNumber Q0 docID rank score runTag
-                writer.println(queryNumber + " 0 " + docID + " " + rank + " " + hit.score + " STANDARD");
+                // Output results in the required TREC format
+                writer.println(queryID + " 0 " + documentID + " " + rank + " " + scoreDoc.score + " STANDARD");
                 rank++;
             }
         } catch (Exception e) {
@@ -121,25 +118,25 @@ public class SearchFiles {
         }
     }
 
-    // Method to set the similarity model
-    private static void setSimilarity(IndexSearcher searcher, int scoreType) {
-        switch (scoreType) {
+    // Select the scoring method for the searcher
+    private static void applyScoringMethod(IndexSearcher searcher, int scoringOption) {
+        switch (scoringOption) {
             case 0:
-                searcher.setSimilarity(new ClassicSimilarity()); // Classic TF-IDF
+                searcher.setSimilarity(new ClassicSimilarity()); // TF-IDF
                 break;
             case 1:
-                searcher.setSimilarity(new BM25Similarity(1.5f, 0.75f)); // Tuned BM25
+                searcher.setSimilarity(new BM25Similarity(1.5f, 0.75f)); // BM25
                 break;
             case 2:
-                searcher.setSimilarity(new LMDirichletSimilarity()); // LMDirichletSimilarity
+                searcher.setSimilarity(new LMDirichletSimilarity()); // LMDirichlet
                 break;
             default:
-                throw new IllegalArgumentException("Invalid score type: " + scoreType);
+                throw new IllegalArgumentException("Invalid scoring method: " + scoringOption);
         }
     }
 
-    // Method to escape special characters in queries
-    public static String escapeSpecialCharacters(String queryString) {
+    // Sanitize query to escape special characters
+    public static String sanitizeQuery(String queryString) {
         String[] specialChars = { "\\", "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~", "*",
                 "?", ":", "/" };
         for (String specialChar : specialChars) {

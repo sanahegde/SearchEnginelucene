@@ -18,109 +18,109 @@ import java.nio.file.Paths;
 
 public class IndexFiles {
 
-    private static StandardAnalyzer analyzer = new StandardAnalyzer();
+    // Reuse the same analyzer throughout the program
+    private static final StandardAnalyzer analyzer = new StandardAnalyzer();
 
     public static void main(String[] args) throws Exception {
+        // Ensure required arguments are provided
         if (args.length < 2) {
-            System.out.println("Usage: IndexFiles <indexDir> <docsDir>");
+            System.out.println("Usage: java IndexFiles <indexPath> <docsPath>");
             return;
         }
 
-        String indexPath = args[0]; // Directory to save the index
-        String docsPath = args[1]; // Directory of the documents
+        String indexPath = args[0]; // Index location
+        String docsPath = args[1]; // Document directory
 
-        // Check if documents directory exists
-        File docsDir = new File(docsPath);
-        if (!docsDir.exists() || !docsDir.isDirectory()) {
-            System.out.println("Document directory does not exist or is not a directory: " + docsPath);
+        // Check if the documents directory exists
+        File docDir = new File(docsPath);
+        if (!docDir.exists() || !docDir.isDirectory()) {
+            System.out.println("Document directory '" + docsPath + "' does not exist or is not a directory");
             return;
         }
 
-        // Open directory for index storage
+        // Initialize the Lucene index directory
         Directory dir = FSDirectory.open(Paths.get(indexPath));
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 
+        // Start indexing documents
         try (IndexWriter writer = new IndexWriter(dir, config)) {
-            // Index each document in the specified directory
-            File[] files = docsDir.listFiles();
+            File[] files = docDir.listFiles();
             if (files != null) {
                 for (File file : files) {
                     if (file.isFile()) {
-                        System.out.println("Indexing file: " + file.getName());
-                        indexDocuments(writer, file); // Fixed method signature
+                        System.out.println("Indexing: " + file.getName());
+                        processDocument(writer, file);
                     }
                 }
             } else {
-                System.out.println("No files found in the directory: " + docsPath);
+                System.out.println("No files found in " + docsPath);
             }
         }
 
         System.out.println("Indexing completed.");
     }
 
-    // Corrected to match the expected file type and the IndexWriter
-    public static void indexDocuments(IndexWriter writer, File file) throws IOException {
+    // Method to process and index a single document
+    private static void processDocument(IndexWriter writer, File file) throws IOException {
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
-            StringBuilder docContent = new StringBuilder();
-            int docId = 0;
-            String title = ""; // Initialize title variable
+            StringBuilder contentBuilder = new StringBuilder();
+            int docID = 0;
+            String title = "";
+
             while ((line = reader.readLine()) != null) {
                 if (line.startsWith(".I")) {
-                    // If there's content from a previous document, index it
-                    if (docContent.length() > 0) {
-                        addDocument(writer, String.valueOf(docId), title, docContent.toString());
-                        docContent.setLength(0); // Clear the content buffer
-                        title = ""; // Reset title for the next document
+                    // Index the previous document if content exists
+                    if (contentBuilder.length() > 0) {
+                        addToIndex(writer, String.valueOf(docID), title, contentBuilder.toString());
+                        contentBuilder.setLength(0); // Clear the content for the next document
+                        title = ""; // Reset title
                     }
-                    // Read the new document ID
-                    docId = Integer.parseInt(line.split(" ")[1].trim());
-                    System.out.println("docId: " + docId);
-                } else if (line.startsWith(".T")) { // Capture title if present
+
+                    docID = Integer.parseInt(line.split(" ")[1].trim());
+                    System.out.println("Document ID: " + docID);
+                } else if (line.startsWith(".T")) {
                     StringBuilder titleBuilder = new StringBuilder();
-                    // Read subsequent lines for the title
                     while ((line = reader.readLine()) != null) {
-                        if (line.startsWith(".A") || line.startsWith(".B")) { // End of title section
-                            break; // Exit loop when encountering the next marker
+                        if (line.startsWith(".A") || line.startsWith(".B")) {
+                            break;
                         }
-                        titleBuilder.append(line.trim()).append(" "); // Accumulate title lines
+                        titleBuilder.append(line.trim()).append(" ");
                     }
-                    title = titleBuilder.toString().trim(); // Capture title
+                    title = titleBuilder.toString().trim();
                     System.out.println("Title: " + title);
-                } else if (line.startsWith(".W")) { // Start of the document content
-                    StringBuilder contentBuilder = new StringBuilder();
+                } else if (line.startsWith(".W")) {
+                    StringBuilder content = new StringBuilder();
                     while ((line = reader.readLine()) != null) {
-                        if (line.startsWith(".I")) { // End of content section and beginning of new document
-                            docContent.append(contentBuilder.toString().trim()); // Append content
-                            addDocument(writer, String.valueOf(docId), title, docContent.toString()); // Index the
-                                                                                                      // document
-                            docContent.setLength(0); // Clear content buffer for next doc
-                            docId = Integer.parseInt(line.split(" ")[1].trim()); // Read new document ID
-                            System.out.println("New docId: " + docId); // Process the next docId
-                            break; // Exit inner loop to process next document
+                        if (line.startsWith(".I")) {
+                            contentBuilder.append(content.toString().trim());
+                            addToIndex(writer, String.valueOf(docID), title, contentBuilder.toString());
+                            contentBuilder.setLength(0);
+                            docID = Integer.parseInt(line.split(" ")[1].trim());
+                            System.out.println("Next Document ID: " + docID);
+                            break;
                         }
-                        contentBuilder.append(line.trim()).append(" "); // Accumulate content
+                        content.append(line.trim()).append(" ");
                     }
+
                     if (line == null) {
-                        // If end of file, index the last document
-                        docContent.append(contentBuilder.toString().trim());
-                        addDocument(writer, String.valueOf(docId), title, docContent.toString()); // Index last document
+                        contentBuilder.append(content.toString().trim());
+                        addToIndex(writer, String.valueOf(docID), title, contentBuilder.toString());
                     }
                 }
             }
         }
     }
 
-    // Method to add the document to Lucene's index
-    private static void addDocument(IndexWriter writer, String docID, String title, String textContent)
-            throws IOException {
+    // Method to add a document to the index
+    private static void addToIndex(IndexWriter writer, String docID, String title, String content) throws IOException {
         Document doc = new Document();
 
-        // Index the document ID, title, and content
-        doc.add(new StringField("documentID", docID, Field.Store.YES));
+        // Add fields to the Lucene document
+        doc.add(new StringField("docID", docID, Field.Store.YES));
         doc.add(new TextField("title", title, Field.Store.YES));
-        doc.add(new TextField("contents", textContent, Field.Store.YES));
+        doc.add(new TextField("content", content, Field.Store.YES));
 
         writer.addDocument(doc);
     }
