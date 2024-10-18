@@ -1,6 +1,6 @@
 package ca.IR;
 
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
+import org.apache.lucene.analysis.custom.CustomAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -28,7 +28,14 @@ public class IndexFiles {
 
         Directory dir = FSDirectory.open(Paths.get(indexDir));
 
-        EnglishAnalyzer analyzer = new EnglishAnalyzer();
+        // Custom analyzer for indexing
+        CustomAnalyzer analyzer = CustomAnalyzer.builder()
+                .withTokenizer("standard")
+                .addTokenFilter("lowercase")
+                .addTokenFilter("stop") // Stopword removal
+                .addTokenFilter("porterStem") // Stemming for better tokenization
+                .build();
+
         IndexWriterConfig config = new IndexWriterConfig(analyzer);
         config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 

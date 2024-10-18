@@ -65,11 +65,11 @@ public class SearchFiles {
             CustomAnalyzer analyzer = new CustomAnalyzer();
             String[] fields = { "title", "author", "contents" };
 
-            // Aggressive field boosts
+            // Field boosts (reduced aggressive boosts for better performance)
             Map<String, Float> boosts = new HashMap<>();
-            boosts.put("title", 5.0f);
-            boosts.put("author", 4.0f);
-            boosts.put("contents", 1.0f);
+            boosts.put("title", 3.0f); // Lowering boost on title
+            boosts.put("author", 2.0f); // Lowering boost on author
+            boosts.put("contents", 1.0f); // Keeping contents boost neutral
 
             MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
 
@@ -90,9 +90,9 @@ public class SearchFiles {
 
                         int rank = 1;
                         for (ScoreDoc hit : hits) {
-                            Document doc = searcher.doc(hit.doc);
-                            String docID = doc.get("documentID");
-                            writer.println(queryNum + " 0 " + docID + " " + rank + " " + hit.score + " STANDARD");
+                            // Instead of documentID, output the document index
+                            int docIndex = hit.doc; // Get the internal document index
+                            writer.println(queryNum + " 0 " + docIndex + " " + rank + " " + hit.score + " STANDARD");
                             rank++;
                         }
                         queryNum++;
@@ -104,8 +104,9 @@ public class SearchFiles {
         }
     }
 
-    // More aggressive BM25 tuning
+    // Tuning BM25
     private static void setBM25Similarity(IndexSearcher searcher) {
-        BM25Similarity bm25 = new BM25Similarity(3.0f, 0.2f);
+        BM25Similarity bm25 = new BM25Similarity(1.2f, 0.75f); // Less aggressive parameters
+        searcher.setSimilarity(bm25);
     }
 }
