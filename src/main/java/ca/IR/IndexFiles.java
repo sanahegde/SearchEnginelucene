@@ -43,11 +43,11 @@ public class IndexFiles {
                 }
             }
         } else {
-            System.out.println("No files were found in the directory: " + docsDir);
+            System.out.println("No files found in the directory: " + docsDir);
         }
 
         writer.close();
-        System.out.println("Indexing has been completed.");
+        System.out.println("Indexing completed.");
     }
 
     static void indexDoc(IndexWriter writer, File file) throws IOException {

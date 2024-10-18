@@ -33,13 +33,14 @@ public class SearchFiles {
                 PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
 
             IndexSearcher searcher = new IndexSearcher(reader);
-            setBM25Similarity(searcher); // Setting BM25 Similarity
+            setBM25Similarity(searcher);
 
             EnglishAnalyzer analyzer = new EnglishAnalyzer();
             String[] fields = { "title", "author", "contents" };
+
             Map<String, Float> boosts = new HashMap<>();
-            boosts.put("title", 2.0f);
-            boosts.put("author", 1.5f);
+            boosts.put("title", 3.0f);
+            boosts.put("author", 2.0f);
             boosts.put("contents", 1.0f);
 
             MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
@@ -57,7 +58,7 @@ public class SearchFiles {
                         queryString = QueryParser.escape(queryString);
                         Query query = parser.parse(queryString);
 
-                        ScoreDoc[] hits = searcher.search(query, 100).scoreDocs; // Retrieving the top 100 results
+                        ScoreDoc[] hits = searcher.search(query, 100).scoreDocs;
 
                         int rank = 1;
                         for (ScoreDoc hit : hits) {
@@ -75,9 +76,9 @@ public class SearchFiles {
         }
     }
 
-    // SetTing the BM25 similarity with custom parameters
+    // Setting the BM25 similarity with fine-tuned parameters
     private static void setBM25Similarity(IndexSearcher searcher) {
-        BM25Similarity bm25 = new BM25Similarity(1.2f, 0.75f);
+        BM25Similarity bm25 = new BM25Similarity(1.5f, 0.5f);
         searcher.setSimilarity(bm25);
     }
 }
