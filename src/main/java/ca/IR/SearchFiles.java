@@ -1,6 +1,13 @@
 package ca.IR;
 
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.core.StopFilter;
 import org.apache.lucene.analysis.en.EnglishAnalyzer;
+import org.apache.lucene.analysis.standard.StandardTokenizer;
+import org.apache.lucene.analysis.CharArraySet;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.analysis.core.LowerCaseFilter;
+import org.apache.lucene.analysis.en.PorterStemFilter;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
@@ -13,11 +20,30 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
 public class SearchFiles {
+
+    public static class CustomAnalyzer extends Analyzer {
+        private static final List<String> STOP_WORDS = Arrays.asList(
+                "a", "an", "the", "and", "or", "is", "are", "was", "were", "this", "that", "it", "on", "in", "at",
+                "by");
+        private static final CharArraySet STOP_WORD_SET = new CharArraySet(STOP_WORDS, true);
+
+        @Override
+        protected TokenStreamComponents createComponents(String fieldName) {
+            StandardTokenizer tokenizer = new StandardTokenizer();
+            TokenStream tokenStream = new LowerCaseFilter(tokenizer);
+            tokenStream = new StopFilter(tokenStream, STOP_WORD_SET);
+            tokenStream = new PorterStemFilter(tokenStream);
+            return new TokenStreamComponents(tokenizer, tokenStream);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
             System.out.println("Usage: SearchFiles <indexDir> <queriesFile> <scoreType> <outputFile>");
@@ -35,12 +61,14 @@ public class SearchFiles {
             IndexSearcher searcher = new IndexSearcher(reader);
             setBM25Similarity(searcher);
 
-            EnglishAnalyzer analyzer = new EnglishAnalyzer();
+            // Using the custom analyzer
+            CustomAnalyzer analyzer = new CustomAnalyzer();
             String[] fields = { "title", "author", "contents" };
 
+            // Aggressive field boosts
             Map<String, Float> boosts = new HashMap<>();
-            boosts.put("title", 4.0f);
-            boosts.put("author", 3.0f);
+            boosts.put("title", 5.0f);
+            boosts.put("author", 4.0f);
             boosts.put("contents", 1.0f);
 
             MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
@@ -76,9 +104,8 @@ public class SearchFiles {
         }
     }
 
-    // Setting the BM25 similarity with fine-tuned parameters
+    // More aggressive BM25 tuning
     private static void setBM25Similarity(IndexSearcher searcher) {
-        BM25Similarity bm25 = new BM25Similarity(2.5f, 0.3f);
-        searcher.setSimilarity(bm25);
+        BM25Similarity bm25 = new BM25Similarity(3.0f, 0.2f);
     }
 }
