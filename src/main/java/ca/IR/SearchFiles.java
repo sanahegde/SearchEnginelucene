@@ -39,8 +39,8 @@ public class SearchFiles {
             String[] fields = { "title", "author", "contents" };
 
             Map<String, Float> boosts = new HashMap<>();
-            boosts.put("title", 3.0f);
-            boosts.put("author", 2.0f);
+            boosts.put("title", 4.0f);
+            boosts.put("author", 3.0f);
             boosts.put("contents", 1.0f);
 
             MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
@@ -78,7 +78,7 @@ public class SearchFiles {
 
     // Setting the BM25 similarity with fine-tuned parameters
     private static void setBM25Similarity(IndexSearcher searcher) {
-        BM25Similarity bm25 = new BM25Similarity(1.5f, 0.5f);
+        BM25Similarity bm25 = new BM25Similarity(2.0f, 0.4f);
         searcher.setSimilarity(bm25);
     }
 }
