@@ -1,6 +1,6 @@
 package ca.IR;
 
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -11,98 +11,98 @@ import java.io.*;
 import java.nio.file.Paths;
 
 public class IndexFiles {
-
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
             System.out.println("Usage: IndexFiles <indexDir> <docsDir>");
             return;
         }
 
-        String indexLocation = args[0];
-        String documentDirectoryPath = args[1];
+        String indexDir = args[0];
+        String docsDir = args[1];
 
-        File documentDirectory = new File(documentDirectoryPath);
-        if (!documentDirectory.exists() || !documentDirectory.isDirectory()) {
-            System.out.println("Invalid documents directory: " + documentDirectoryPath);
+        File docs = new File(docsDir);
+        if (!docs.exists() || !docs.isDirectory()) {
+            System.out.println("Document directory does not exist or is not a directory: " + docsDir);
             return;
         }
 
-        Directory indexDirectory = FSDirectory.open(Paths.get(indexLocation));
-        StandardAnalyzer analyzer = new StandardAnalyzer();
-        IndexWriterConfig writerConfig = new IndexWriterConfig(analyzer);
-        writerConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+        Directory dir = FSDirectory.open(Paths.get(indexDir));
 
-        IndexWriter indexWriter = new IndexWriter(indexDirectory, writerConfig);
+        EnglishAnalyzer analyzer = new EnglishAnalyzer();
+        IndexWriterConfig config = new IndexWriterConfig(analyzer);
+        config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 
-        File[] documentFiles = documentDirectory.listFiles();
-        if (documentFiles != null) {
-            for (File docFile : documentFiles) {
-                if (docFile.isFile()) {
-                    System.out.println("Indexing document: " + docFile.getName());
-                    indexDocument(indexWriter, docFile);
+        IndexWriter writer = new IndexWriter(dir, config);
+
+        File[] files = docs.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile()) {
+                    System.out.println("Indexing file: " + file.getName());
+                    indexDoc(writer, file);
                 }
             }
         } else {
-            System.out.println("No document files found in this directory: " + documentDirectoryPath);
+            System.out.println("No files were found in the directory: " + docsDir);
         }
 
-        indexWriter.close();
-        System.out.println("Document indexing has been completed.");
+        writer.close();
+        System.out.println("Indexing has been completed.");
     }
 
-    static void indexDocument(IndexWriter indexWriter, File docFile) throws IOException {
-        try (BufferedReader bufferedReader = new BufferedReader(new FileReader(docFile))) {
+    static void indexDoc(IndexWriter writer, File file) throws IOException {
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
             String docID = null;
             StringBuilder title = new StringBuilder();
             StringBuilder author = new StringBuilder();
             StringBuilder content = new StringBuilder();
-            boolean isContentPart = false;
+            boolean isContent = false;
 
-            while ((line = bufferedReader.readLine()) != null) {
+            while ((line = br.readLine()) != null) {
                 if (line.startsWith(".I")) {
                     if (docID != null) {
-                        addToIndex(indexWriter, docID, title.toString(), author.toString(), content.toString());
+                        addDocument(writer, docID, title.toString(), author.toString(), content.toString());
                         title.setLength(0);
                         author.setLength(0);
                         content.setLength(0);
                     }
                     docID = line.substring(3).trim();
                 } else if (line.startsWith(".T")) {
-                    line = bufferedReader.readLine();
+                    line = br.readLine();
                     while (line != null && !line.startsWith(".")) {
                         title.append(line).append(" ");
-                        line = bufferedReader.readLine();
+                        line = br.readLine();
                     }
                 } else if (line.startsWith(".A")) {
-                    line = bufferedReader.readLine();
+                    line = br.readLine();
                     while (line != null && !line.startsWith(".")) {
                         author.append(line).append(" ");
-                        line = bufferedReader.readLine();
+                        line = br.readLine();
                     }
                 } else if (line.startsWith(".W")) {
-                    isContentPart = true;
+                    isContent = true;
                     continue;
                 }
 
-                if (isContentPart) {
+                if (isContent) {
                     content.append(line).append(" ");
                 }
             }
 
             if (docID != null) {
-                addToIndex(indexWriter, docID, title.toString(), author.toString(), content.toString());
+                addDocument(writer, docID, title.toString(), author.toString(), content.toString());
             }
         }
     }
 
-    private static void addToIndex(IndexWriter writer, String docID, String title, String author, String content)
+    private static void addDocument(IndexWriter writer, String docID, String title, String author, String textContent)
             throws IOException {
         Document doc = new Document();
         doc.add(new TextField("title", title, Field.Store.YES));
         doc.add(new TextField("author", author, Field.Store.YES));
-        doc.add(new TextField("contents", content, Field.Store.YES));
-        doc.add(new TextField("documentID", docID, Field.Store.YES));
+        doc.add(new TextField("contents", textContent, Field.Store.YES));
+        doc.add(new StringField("documentID", docID, Field.Store.YES));
 
         writer.addDocument(doc);
     }

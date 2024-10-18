@@ -1,12 +1,12 @@
 package ca.IR;
 
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.en.EnglishAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.*;
-import org.apache.lucene.search.similarities.*;
+import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.FSDirectory;
 
 import java.io.File;
@@ -18,85 +18,66 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class SearchFiles {
-
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
             System.out.println("Usage: SearchFiles <indexDir> <queriesFile> <scoreType> <outputFile>");
             return;
         }
 
-        String indexLocation = args[0];
-        String queryFileLocation = args[1];
-        int similarityType = Integer.parseInt(args[2]);
-        String outputFileLocation = args[3];
+        String indexDir = args[0];
+        String queriesFile = args[1];
+        int scoreType = Integer.parseInt(args[2]);
+        String outputFile = args[3];
 
-        try (DirectoryReader dirReader = DirectoryReader.open(FSDirectory.open(Paths.get(indexLocation)));
-                PrintWriter resultWriter = new PrintWriter(new FileWriter(outputFileLocation))) {
+        try (DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDir)));
+                PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
 
-            IndexSearcher indexSearcher = new IndexSearcher(dirReader);
-            setSearcherSimilarity(indexSearcher, similarityType);
+            IndexSearcher searcher = new IndexSearcher(reader);
+            setBM25Similarity(searcher); // Setting BM25 Similarity
 
-            StandardAnalyzer analyzer = new StandardAnalyzer();
-            String[] queryFields = { "title", "author", "contents" };
-            Map<String, Float> fieldBoosts = new HashMap<>();
-            fieldBoosts.put("title", 2.0f);
-            fieldBoosts.put("author", 1.5f);
-            fieldBoosts.put("contents", 1.0f);
+            EnglishAnalyzer analyzer = new EnglishAnalyzer();
+            String[] fields = { "title", "author", "contents" };
+            Map<String, Float> boosts = new HashMap<>();
+            boosts.put("title", 2.0f);
+            boosts.put("author", 1.5f);
+            boosts.put("contents", 1.0f);
 
-            MultiFieldQueryParser queryParser = new MultiFieldQueryParser(queryFields, analyzer, fieldBoosts);
+            MultiFieldQueryParser parser = new MultiFieldQueryParser(fields, analyzer, boosts);
 
-            File queryFile = new File(queryFileLocation);
-            try (Scanner fileScanner = new Scanner(queryFile)) {
-                int queryCounter = 1;
+            File queryFile = new File(queriesFile);
+            try (Scanner scanner = new Scanner(queryFile)) {
+                int queryNum = 1;
 
-                while (fileScanner.hasNextLine()) {
-                    String queryInput = fileScanner.nextLine().trim();
-                    if (queryInput.isEmpty())
+                while (scanner.hasNextLine()) {
+                    String queryString = scanner.nextLine().trim();
+                    if (queryString.isEmpty())
                         continue;
 
                     try {
-                        queryInput = QueryParser.escape(queryInput);
-                        Query userQuery = queryParser.parse(queryInput);
+                        queryString = QueryParser.escape(queryString);
+                        Query query = parser.parse(queryString);
 
-                        ScoreDoc[] topHits = indexSearcher.search(userQuery, 100).scoreDocs;
-                        int resultRank = 1;
+                        ScoreDoc[] hits = searcher.search(query, 100).scoreDocs; // Retrieving the top 100 results
 
-                        for (ScoreDoc scoreDoc : topHits) {
-                            Document document = indexSearcher.doc(scoreDoc.doc);
-                            String documentID = document.get("documentID");
-                            resultWriter.println(queryCounter + " 0 " + documentID + " " + resultRank + " "
-                                    + scoreDoc.score + " STANDARD");
-                            resultRank++;
+                        int rank = 1;
+                        for (ScoreDoc hit : hits) {
+                            Document doc = searcher.doc(hit.doc);
+                            String docID = doc.get("documentID");
+                            writer.println(queryNum + " 0 " + docID + " " + rank + " " + hit.score + " STANDARD");
+                            rank++;
                         }
-                        queryCounter++;
+                        queryNum++;
                     } catch (Exception e) {
-                        System.out.println("Error in query parsing: " + queryInput);
+                        System.out.println("Error parsing query: " + queryString);
                     }
                 }
             }
         }
     }
 
-    private static void setSearcherSimilarity(IndexSearcher searcher, int similarityType) {
-        switch (similarityType) {
-            case 0:
-                searcher.setSimilarity(new ClassicSimilarity());
-                break;
-            case 1:
-                searcher.setSimilarity(new BM25Similarity(1.5f, 0.75f));
-                break;
-            case 2:
-                searcher.setSimilarity(new BooleanSimilarity());
-                break;
-            case 3:
-                searcher.setSimilarity(new LMDirichletSimilarity());
-                break;
-            case 4:
-                searcher.setSimilarity(new LMJelinekMercerSimilarity(0.7f));
-                break;
-            default:
-                System.out.println("Invalid similarity type.");
-                throw new IllegalArgumentException("Unsupported similarity type:.");
-        }
+    // SetTing the BM25 similarity with custom parameters
+    private static void setBM25Similarity(IndexSearcher searcher) {
+        BM25Similarity bm25 = new BM25Similarity(1.2f, 0.75f);
+        searcher.setSimilarity(bm25);
     }
 }
