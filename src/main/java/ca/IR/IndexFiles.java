@@ -33,9 +33,9 @@ public class IndexFiles {
         // Use StandardAnalyzer instead of EnglishAnalyzer
         StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
         // Alternatively, you can try WhitespaceAnalyzer for testing
-        // WhitespaceAnalyzer whitespaceAnalyzer = new WhitespaceAnalyzer();
+        WhitespaceAnalyzer whitespaceAnalyzer = new WhitespaceAnalyzer();
 
-        IndexWriterConfig iwConfig = new IndexWriterConfig(standardAnalyzer); // Switch analyzer here
+        IndexWriterConfig iwConfig = new IndexWriterConfig(whitespaceAnalyzer); // Switch analyzer here
         iwConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 
         try (IndexWriter idxWriter = new IndexWriter(indexDir, iwConfig)) {
