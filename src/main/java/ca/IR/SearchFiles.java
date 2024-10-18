@@ -90,9 +90,9 @@ public class SearchFiles {
 
                         int rank = 1;
                         for (ScoreDoc hit : hits) {
-                            // Instead of documentID, output the document index
-                            int docIndex = hit.doc; // Get the internal document index
-                            writer.println(queryNum + " 0 " + docIndex + " " + rank + " " + hit.score + " STANDARD");
+                            Document doc = searcher.doc(hit.doc);
+                            String docID = doc.get("documentID");
+                            writer.println(queryNum + " 0 " + docID + " " + rank + " " + hit.score + " STANDARD");
                             rank++;
                         }
                         queryNum++;
