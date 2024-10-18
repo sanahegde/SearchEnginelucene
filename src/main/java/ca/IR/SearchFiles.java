@@ -78,7 +78,7 @@ public class SearchFiles {
 
     // Setting the BM25 similarity with fine-tuned parameters
     private static void setBM25Similarity(IndexSearcher searcher) {
-        BM25Similarity bm25 = new BM25Similarity(2.0f, 0.4f);
+        BM25Similarity bm25 = new BM25Similarity(2.5f, 0.3f);
         searcher.setSimilarity(bm25);
     }
 }
