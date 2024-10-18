@@ -1,6 +1,7 @@
 package ca.IR;
 
-import org.apache.lucene.analysis.en.EnglishAnalyzer;
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.analysis.core.WhitespaceAnalyzer;
 import org.apache.lucene.document.*;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -28,8 +29,13 @@ public class IndexFiles {
         }
 
         Directory indexDir = FSDirectory.open(Paths.get(indexDirectoryPath));
-        EnglishAnalyzer engAnalyzer = new EnglishAnalyzer();
-        IndexWriterConfig iwConfig = new IndexWriterConfig(engAnalyzer);
+
+        // Use StandardAnalyzer instead of EnglishAnalyzer
+        StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
+        // Alternatively, you can try WhitespaceAnalyzer for testing
+        // WhitespaceAnalyzer whitespaceAnalyzer = new WhitespaceAnalyzer();
+
+        IndexWriterConfig iwConfig = new IndexWriterConfig(standardAnalyzer); // Switch analyzer here
         iwConfig.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
 
         try (IndexWriter idxWriter = new IndexWriter(indexDir, iwConfig)) {
