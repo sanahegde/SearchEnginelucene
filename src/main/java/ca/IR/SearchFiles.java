@@ -10,9 +10,7 @@ import org.apache.lucene.search.similarities.ClassicSimilarity;
 import org.apache.lucene.search.similarities.LMDirichletSimilarity;
 import org.apache.lucene.store.FSDirectory;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.PrintWriter;
+import java.io.*;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,126 +20,120 @@ public class SearchFiles {
 
     public static void main(String[] args) throws Exception {
         if (args.length < 4) {
-            System.out.println("Usage: SearchFiles <indexDir> <queriesFile> <scoreType> <outputFile>");
+            System.out
+                    .println("Usage: SearchFiles <indexDirectory> <queriesFilePath> <similarityType> <outputFilePath>");
             return;
         }
 
         String indexDirectory = args[0];
-        String queriesFile = args[1];
-        int scoringMethod = Integer.parseInt(args[2]);
-        String outputFile = args[3];
+        String queriesFilePath = args[1];
+        int similarityType = Integer.parseInt(args[2]);
+        String outputFilePath = args[3];
 
-        try (DirectoryReader reader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectory)));
-                PrintWriter writer = new PrintWriter(new FileWriter(outputFile))) {
+        try (DirectoryReader dirReader = DirectoryReader.open(FSDirectory.open(Paths.get(indexDirectory)));
+                PrintWriter resultWriter = new PrintWriter(new FileWriter(outputFilePath))) {
 
-            IndexSearcher searcher = new IndexSearcher(reader);
-            applyScoringMethod(searcher, scoringMethod);
+            IndexSearcher indexSearcher = new IndexSearcher(dirReader);
+            applySimilarityModel(indexSearcher, similarityType);
 
-            StandardAnalyzer analyzer = new StandardAnalyzer();
-            String[] searchableFields = { "title", "contents" };
+            StandardAnalyzer standardAnalyzer = new StandardAnalyzer();
+            String[] queryFields = { "title", "contents" };
             Map<String, Float> fieldBoosts = new HashMap<>();
-            fieldBoosts.put("title", 3.0f); // Boost for title
+            fieldBoosts.put("title", 3.0f);
             fieldBoosts.put("contents", 1.0f);
 
-            MultiFieldQueryParser parser = new MultiFieldQueryParser(searchableFields, analyzer, fieldBoosts);
+            MultiFieldQueryParser queryParser = new MultiFieldQueryParser(queryFields, standardAnalyzer, fieldBoosts);
 
-            // Parse and process the queries from the file
-            handleQueries(queriesFile, parser, searcher, writer);
+            parseAndProcessQueries(queriesFilePath, queryParser, indexSearcher, resultWriter);
         }
 
-        System.out.println("Search completed. Results written to: " + outputFile);
+        System.out.println("Search process completed. Results saved in: " + outputFilePath);
     }
 
-    // Parse the queries from the file
-    private static void handleQueries(String queryFilePath, MultiFieldQueryParser queryParser, IndexSearcher searcher,
+    private static void parseAndProcessQueries(String queryFilePath, MultiFieldQueryParser queryParser,
+            IndexSearcher indexSearcher,
             PrintWriter resultWriter) {
         File queryFile = new File(queryFilePath);
 
         if (!queryFile.exists() || !queryFile.canRead()) {
-            System.out.println("Query file not found or cannot be read: " + queryFilePath);
+            System.out.println("Cannot access query file: " + queryFilePath);
             return;
         }
 
-        try (Scanner scanner = new Scanner(queryFile)) {
-            int queryID = 1;
-            StringBuilder queryContent = new StringBuilder();
-            boolean isReadingQuery = false;
+        try (Scanner queryScanner = new Scanner(queryFile)) {
+            int queryId = 1;
+            StringBuilder currentQuery = new StringBuilder();
+            boolean queryReading = false;
 
-            while (scanner.hasNextLine()) {
-                String line = scanner.nextLine().trim();
+            while (queryScanner.hasNextLine()) {
+                String currentLine = queryScanner.nextLine().trim();
 
-                if (line.startsWith(".I")) {
-                    // Process previous query content if available
-                    if (isReadingQuery) {
-                        executeQuery(queryContent.toString(), queryID, queryParser, searcher, resultWriter);
-                        queryContent.setLength(0);
+                if (currentLine.startsWith(".I")) {
+                    if (queryReading) {
+                        executeQuery(currentQuery.toString(), queryId, queryParser, indexSearcher, resultWriter);
+                        currentQuery.setLength(0);
                     }
-                    queryID++; // Move to the next query
-                    isReadingQuery = false;
-                } else if (line.startsWith(".W")) {
-                    isReadingQuery = true;
-                } else if (isReadingQuery) {
-                    queryContent.append(line).append(" ");
+                    queryId++;
+                    queryReading = false;
+                } else if (currentLine.startsWith(".W")) {
+                    queryReading = true;
+                } else if (queryReading) {
+                    currentQuery.append(currentLine).append(" ");
                 }
             }
-            // Process the final query if there is content
-            if (queryContent.length() > 0) {
-                executeQuery(queryContent.toString(), queryID, queryParser, searcher, resultWriter);
+
+            if (currentQuery.length() > 0) {
+                executeQuery(currentQuery.toString(), queryId, queryParser, indexSearcher, resultWriter);
             }
-        } catch (Exception e) {
-            System.out.println("Error processing the query file: " + e.getMessage());
+        } catch (FileNotFoundException e) {
+            System.out.println("Error: Could not read the query file - " + e.getMessage());
         }
     }
 
-    // Execute the search for a single query
-    private static void executeQuery(String queryString, int queryID, MultiFieldQueryParser queryParser,
-            IndexSearcher searcher, PrintWriter writer) {
+    private static void executeQuery(String queryText, int queryId, MultiFieldQueryParser queryParser,
+            IndexSearcher indexSearcher,
+            PrintWriter resultWriter) {
         try {
-            queryString = sanitizeQuery(queryString.trim()); // Clean the query string
-            Query query = queryParser.parse(queryString);
+            queryText = sanitizeQuery(queryText.trim());
+            Query parsedQuery = queryParser.parse(queryText);
 
-            // Execute the search and get top 50 results
-            ScoreDoc[] results = searcher.search(query, 50).scoreDocs;
+            ScoreDoc[] searchResults = indexSearcher.search(parsedQuery, 50).scoreDocs;
 
             int rank = 1;
-            for (ScoreDoc scoreDoc : results) {
-                Document document = searcher.doc(scoreDoc.doc);
+            for (ScoreDoc scoreDoc : searchResults) {
+                Document retrievedDoc = indexSearcher.doc(scoreDoc.doc);
+                String docID = retrievedDoc.get("documentID");
 
-                String documentID = document.get("documentID");
-
-                // Output results in the required TREC format
-                writer.println(queryID + " 0 " + documentID + " " + rank + " " + scoreDoc.score + " STANDARD");
+                resultWriter.println(queryId + " 0 " + docID + " " + rank + " " + scoreDoc.score + " STANDARD");
                 rank++;
             }
         } catch (Exception e) {
-            System.out.println("Error parsing query: " + queryString);
+            System.out.println("Error while parsing query: " + queryText);
         }
     }
 
-    // Select the scoring method for the searcher
-    private static void applyScoringMethod(IndexSearcher searcher, int scoringOption) {
-        switch (scoringOption) {
+    private static void applySimilarityModel(IndexSearcher searcher, int similarityType) {
+        switch (similarityType) {
             case 0:
-                searcher.setSimilarity(new ClassicSimilarity()); // TF-IDF
+                searcher.setSimilarity(new ClassicSimilarity());
                 break;
             case 1:
-                searcher.setSimilarity(new BM25Similarity(1.5f, 0.75f)); // BM25
+                searcher.setSimilarity(new BM25Similarity(1.5f, 0.75f));
                 break;
             case 2:
-                searcher.setSimilarity(new LMDirichletSimilarity()); // LMDirichlet
+                searcher.setSimilarity(new LMDirichletSimilarity());
                 break;
             default:
-                throw new IllegalArgumentException("Invalid scoring method: " + scoringOption);
+                throw new IllegalArgumentException("Invalid similarity type: " + similarityType);
         }
     }
 
-    // Sanitize query to escape special characters
-    public static String sanitizeQuery(String queryString) {
-        String[] specialChars = { "\\", "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~", "*",
-                "?", ":", "/" };
-        for (String specialChar : specialChars) {
-            queryString = queryString.replace(specialChar, "\\" + specialChar);
+    private static String sanitizeQuery(String rawQuery) {
+        String[] specialCharacters = { "\\", "+", "-", "&&", "||", "!", "(", ")", "{", "}", "[", "]", "^", "\"", "~",
+                "*", "?", ":", "/" };
+        for (String specialChar : specialCharacters) {
+            rawQuery = rawQuery.replace(specialChar, "\\" + specialChar);
         }
-        return queryString;
+        return rawQuery;
     }
 }
