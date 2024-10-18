@@ -86,7 +86,7 @@ public class SearchFiles {
                         queryString = QueryParser.escape(queryString);
                         Query query = parser.parse(queryString);
 
-                        ScoreDoc[] hits = searcher.search(query, 1400).scoreDocs;
+                        ScoreDoc[] hits = searcher.search(query, 50).scoreDocs;
 
                         int rank = 1;
                         for (ScoreDoc hit : hits) {
